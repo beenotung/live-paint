@@ -16,3 +16,6 @@ localhost_*.report.html
 # config
 .env
 .open
+
+## data
+data/

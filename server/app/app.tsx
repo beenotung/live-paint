@@ -15,6 +15,8 @@ import type { ClientMessage } from '../../client/index'
 import Style from './components/style.js'
 import { ServerMessage } from '../../client/index'
 import { Raw } from './components/raw.js'
+import { loadState, saveState } from './state.js'
+import { config } from '../config.js'
 
 let template = loadTemplate<index>('index')
 
@@ -106,6 +108,7 @@ let colorPanel = (
 let W = 20
 let H = 20
 
+let state = loadState()
 let y_x_cell: Element[][] = []
 let rows = new Array(H).fill(0).map((_, y) => {
   y_x_cell[y] = []
@@ -113,10 +116,17 @@ let rows = new Array(H).fill(0).map((_, y) => {
     <div class="row">
       {[
         new Array(W).fill(0).map((_, x) => {
+          if (!state[y]) {
+            state[y] = []
+          }
+          if (!state[y][x]) {
+            state[y][x] = ''
+          }
+          let color = state[y][x] || 'white'
           let cell = (
             <div
               id={`c-${y}-${x}`}
-              class="cell white"
+              class={`cell ${color}`}
               onclick={`clickCell(${y},${x})`}
               onmousemove={`overCell(${y},${x})`}
             ></div>
@@ -156,6 +166,10 @@ function paint(input: PaintInput): void {
   cell[Board.attrs]!.class = className
   let message: ServerMessage = ['update-props', `#c-${y}-${x}`, { className }]
   sessions.forEach(session => session.ws.send(message))
+  if (!config.development) {
+    state[y][x] = color
+    saveState(state)
+  }
 }
 
 export let expressRouter = express.Router()
