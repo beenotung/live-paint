@@ -147,14 +147,14 @@ let board = (
   </div>
 )
 enum Board {
-  children = 2,
+  attrs = 1,
 }
 type PaintInput = { y: number; x: number; color: string }
 function paint(input: PaintInput): void {
   let { y, x, color } = input
   let cell = y_x_cell[y][x]
   let className = 'cell ' + color
-  cell[1]!.class = className
+  cell[Board.attrs]!.class = className
   let message: ServerMessage = ['update-props', `#c-${y}-${x}`, { className }]
   sessions.forEach(session => session.ws.send(message))
 }
