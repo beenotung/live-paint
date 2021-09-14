@@ -13,7 +13,6 @@ import { getWSSession, sessions } from './session.js'
 import { capitalize } from './string.js'
 import type { ClientMessage } from '../../client/index'
 import Style from './components/style.js'
-import { Script } from './components/script.js'
 import { ServerMessage } from '../../client/index'
 import { Raw } from './components/raw.js'
 
@@ -92,14 +91,14 @@ let colorPanel = (
       ]}
     </div>
     {Raw(/* html */ `<script>
-    function pickColor(color, div) {
-      window.color = color;
-      let colors = document.querySelectorAll('#colorPanel .cell');
-      colors.forEach(div => {
-        div.style.border = '';
-      })
-      div.style.border = '0.25em solid ' + color;
-    }
+      function pickColor(color, div) {
+        window.color = color;
+        let colors = document.querySelectorAll('#colorPanel .cell');
+        colors.forEach(div => {
+          div.style.border = '';
+        })
+        div.style.border = '0.25em solid ' + color;
+      }
     </script>`)}
   </fieldset>
 )
@@ -132,18 +131,18 @@ let rows = new Array(H).fill(0).map((_, y) => {
 let board = (
   <div id="board">
     {[rows]}
-    {Script(`
-    window.onmousedown = () => window.mouseDown = true
-    window.onmouseup = () => window.mouseDown = false
-    function clickCell(y, x) {
-      let color = window.color || 'black'
-      emit('paint', {y, x, color})
-    }
-    function overCell(y, x) {
-      if (!window.mouseDown) return
-      clickCell(y, x)
-    }
-  `)}
+    {Raw(/* html */ `<script>
+      window.onmousedown = () => window.mouseDown = true
+      window.onmouseup = () => window.mouseDown = false
+      function clickCell(y, x) {
+        let color = window.color || 'black'
+        emit('paint', {y, x, color})
+      }
+      function overCell(y, x) {
+        if (!window.mouseDown) return
+        clickCell(y, x)
+      }
+    </script>`)}
   </div>
 )
 enum Board {
