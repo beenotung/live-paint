@@ -84,7 +84,6 @@ connectWS<ServerMessage>({
     }
   },
   onMessage(event) {
-    console.log('on ws message:', event)
     onServerMessage(event)
   },
 })

@@ -126,7 +126,6 @@ let board = (
     window.onmouseup = () => window.mouseDown = false
     function clickCell(y, x) {
       let color = window.color || 'black'
-      console.log({y, x, color})
       emit('paint', {y, x, color})
     }
     function overCell(y, x) {
