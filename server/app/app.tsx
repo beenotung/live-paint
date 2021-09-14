@@ -2,11 +2,10 @@ import JSX from './jsx/jsx.js'
 import type { index } from '../../template/index.html'
 import { loadTemplate } from '../template.js'
 import express from 'express'
-import { ExpressContext, getContext, WsContext } from './context.js'
-import type { attrs, Element } from './jsx/types'
+import { ExpressContext, WsContext } from './context.js'
+import type { Element } from './jsx/types'
 import { nodeToHTML } from './jsx/html.js'
 import { sendHTML } from './express.js'
-import { Redirect, Switch } from './components/router.js'
 import { OnWsMessage } from '../ws/wss.js'
 import { dispatchUpdate } from './jsx/dispatch.js'
 import { EarlyTerminate } from './helpers.js'
@@ -14,13 +13,13 @@ import { getWSSession, sessions } from './session.js'
 import { capitalize } from './string.js'
 import type { ClientMessage } from '../../client/index'
 import Style from './components/style.js'
-import { mapArray } from './components/fragment.js'
-import { Raw } from './components/raw.js'
 import { Script } from './components/script.js'
 import { ServerMessage } from '../../client/index'
-import { emit } from 'process'
+import { Raw } from './components/raw.js'
 
 let template = loadTemplate<index>('index')
+
+let colors = ['white', 'black', 'red', 'green', 'blue']
 
 let style = Style(/* css */ `
 #board {
@@ -28,6 +27,7 @@ let style = Style(/* css */ `
   flex-direction: column;
   margin: 0.5em;
   outline: 2px solid lightgray;
+  user-select: none;
 }
 #colorPanel .cell {
   border: 0.25em solid lightgray;
@@ -42,9 +42,16 @@ let style = Style(/* css */ `
   height: 1em;
   outline: 1px solid lightgray;
 }
+${colors
+  .map(
+    color => `
+.cell.${color} {
+  background: ${color}
+}
+`,
+  )
+  .join('')}
 `)
-
-let colors = ['white', 'black', 'red', 'green', 'blue']
 
 export function App(): Element {
   // you can write the AST direct for more compact wire-format
@@ -84,40 +91,44 @@ let colorPanel = (
         )),
       ]}
     </div>
-    {Script(`
+    {Raw(/* html */ `<script>
     function pickColor(color, div) {
       window.color = color;
-      let colors = document.querySelectorAll('#colorPanel .cell')
+      let colors = document.querySelectorAll('#colorPanel .cell');
       colors.forEach(div => {
-        div.style.border= ''
+        div.style.border = '';
       })
-      div.style.border= '0.25em solid ' + color
+      div.style.border = '0.25em solid ' + color;
     }
-    `)}
+    </script>`)}
   </fieldset>
 )
 
 let W = 20
 let H = 20
 
-let rows = new Array(H)
-  .fill(0)
-  .map((_, y) => (
+let y_x_cell: Element[][] = []
+let rows = new Array(H).fill(0).map((_, y) => {
+  y_x_cell[y] = []
+  return (
     <div class="row">
       {[
-        new Array(W)
-          .fill(0)
-          .map((_, x) => (
+        new Array(W).fill(0).map((_, x) => {
+          let cell = (
             <div
               id={`c-${y}-${x}`}
-              class="cell"
+              class="cell white"
               onclick={`clickCell(${y},${x})`}
               onmousemove={`overCell(${y},${x})`}
             ></div>
-          )),
+          )
+          y_x_cell[y][x] = cell
+          return cell
+        }),
       ]}
     </div>
-  ))
+  )
+})
 let board = (
   <div id="board">
     {[rows]}
@@ -140,15 +151,11 @@ enum Board {
 }
 type PaintInput = { y: number; x: number; color: string }
 function paint(input: PaintInput): void {
-  console.log('paint:', input)
   let { y, x, color } = input
-  let cells = board[Board.children][0][0][Board.children][2]
-  console.log('cells',cells)
-  let message: ServerMessage = [
-    'update-props',
-    `#c-${y}-${x}`,
-    { style: `background: ${color}` },
-  ]
+  let cell = y_x_cell[y][x]
+  let className = 'cell ' + color
+  cell[1]!.class = className
+  let message: ServerMessage = ['update-props', `#c-${y}-${x}`, { className }]
   sessions.forEach(session => session.ws.send(message))
 }
 
