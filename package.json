@@ -15,6 +15,7 @@
     "size:compress": "gzip -kf build/index.js",
     "size:report": "ls -l build/index.*",
     "start": "node dist/server/index.js -- --prod",
+    "pm2": "pm2 restart live-paint || pm2 start --name live-paint node -- dist/server/index.js --prod",
     "dev": "run-s build reset-open watch",
     "reset-open": "node scripts/reset-open.js",
     "watch": "run-p watch:*",
