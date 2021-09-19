@@ -10,8 +10,6 @@ import { expressRouter, onWsMessage } from './app/app.js'
 import { startSession, closeSession } from './app/session.js'
 import { existsSync, unlinkSync } from 'fs'
 import open from 'open'
-import { cookieMiddleware } from './app/cookie.js'
-import { listenWSSCookie } from './app/cookie.js'
 
 const log = debugLog('index.ts')
 log.enabled = true
@@ -19,7 +17,6 @@ log.enabled = true
 const app = express()
 const server = new HttpServer(app)
 const wss = new ws.WebSocketServer({ server })
-listenWSSCookie(wss)
 listenWSSConnection({
   wss,
   onConnection: ws => {
@@ -39,8 +36,6 @@ app.use(express.static(join('dist', 'client')))
 
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
-
-app.use(cookieMiddleware)
 
 app.use(expressRouter)
 
