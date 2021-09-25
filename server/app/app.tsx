@@ -162,7 +162,7 @@ let board = (
       function touchMoveBoard() {
         let touch = event.touches[0]
         let div = document.elementFromPoint(touch.clientX, touch.clientY)
-        if (div.onmousedown) {
+        if (div && div.onmousedown) {
           div.onmousedown()
         }
       }
