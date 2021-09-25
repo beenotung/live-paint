@@ -128,7 +128,9 @@ let rows = new Array(H).fill(0).map((_, y) => {
               id={`c-${y}-${x}`}
               class={`cell ${color}`}
               onclick={`clickCell(${y},${x})`}
-              onmousemove={`overCell(${y},${x})`}
+              onmousedown={`clickCell(${y},${x})`}
+              onmouseover={`overCell(${y},${x})`}
+              ontouchstart={`touchStartCell(${y},${x})`}
             ></div>
           )
           y_x_cell[y][x] = cell
@@ -139,11 +141,12 @@ let rows = new Array(H).fill(0).map((_, y) => {
   )
 })
 let board = (
-  <div id="board">
+  <div id="board" ontouchmove="touchMoveBoard()">
     {[rows]}
     {Raw(/* html */ `<script>
       window.onmousedown = () => window.mouseDown = true
       window.onmouseup = () => window.mouseDown = false
+      window.ontouchend = window.mouseDown = false
       function clickCell(y, x) {
         let color = window.color || 'black'
         emit('paint', {y, x, color})
@@ -151,6 +154,17 @@ let board = (
       function overCell(y, x) {
         if (!window.mouseDown) return
         clickCell(y, x)
+      }
+      function touchStartCell(y, x) {
+        window.mouseDown = true
+        clickCell(y, x)
+      }
+      function touchMoveBoard() {
+        let touch = event.touches[0]
+        let div = document.elementFromPoint(touch.clientX, touch.clientY)
+        if (div.onmousedown) {
+          div.onmousedown()
+        }
       }
     </script>`)}
   </div>
