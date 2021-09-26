@@ -23,6 +23,9 @@ let template = loadTemplate<index>('index')
 let colors = ['white', 'black', 'red', 'green', 'blue']
 
 let style = Style(/* css */ `
+h1 a {
+  font-size: 1rem;
+}
 #board {
   display: inline-flex;
   flex-direction: column;
@@ -63,7 +66,9 @@ export function App(): Element {
       // or you can write in JSX for better developer-experience (if you're coming from React)
       <>
         {style}
-        <h1>live-paint</h1>
+        <h1>
+          live-paint <a href="https://github.com/beenotung/live-paint">git</a>
+        </h1>
         <p>
           Powered by{' '}
           <a href="https://github.com/beenotung/ts-liveview/tree/v2-rc3-jsx-with-context">
