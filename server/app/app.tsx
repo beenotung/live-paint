@@ -33,6 +33,9 @@ h1 a {
   outline: 2px solid lightgray;
   user-select: none;
 }
+#colorPanel {
+  display: inline-block;
+}
 #colorPanel .cell {
   border: 0.25em solid lightgray;
   outline: 1px solid lightgray;
@@ -76,6 +79,7 @@ export function App(): Element {
           </a>
         </p>
         {colorPanel}
+        <br/>
         {board}
       </>,
     ],
