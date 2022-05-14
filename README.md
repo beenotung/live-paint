@@ -9,4 +9,5 @@ Core file: [app.tsx](server/app/app.tsx)
 Powered by [ts-liveview](./toolkit.md)
 
 Screenshot:
+
 ![Screenshot](./screenshot.png "Screenshot of live-paint")
