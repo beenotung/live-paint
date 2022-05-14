@@ -23,7 +23,10 @@ let template = loadTemplate<index>('index')
 let colors = ['white', 'black', 'red', 'green', 'blue']
 
 let style = Style(/* css */ `
-h1 a {
+h1.title {
+  color: darkblue;
+}
+h1.title a {
   font-size: 1rem;
 }
 #board {
@@ -69,8 +72,10 @@ export function App(): Element {
       // or you can write in JSX for better developer-experience (if you're coming from React)
       <>
         {style}
-        <h1>
-          live-paint <a href="https://github.com/beenotung/live-paint">git</a>
+        <h1 class="title">
+          live-paint{' '}
+          <a href="https://news.ycombinator.com/item?id=28581843">HN</a>{' '}
+          <a href="https://github.com/beenotung/live-paint">git</a>
         </h1>
         <p>
           Powered by{' '}
