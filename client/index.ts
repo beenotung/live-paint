@@ -1,4 +1,3 @@
-import type { attrs, props, selector, VElement, VNode } from './jsx/types'
 import {
   appendNode,
   removeNode,
@@ -11,10 +10,13 @@ import {
   setValue,
 } from './jsx/dom.js'
 import { connectWS } from './ws/ws-lite.js'
+import type { WindowStub } from './internal'
+import type { ClientMessage, ServerMessage } from './types'
 
-let win = window as any
-let wsUrl = location.origin.replace('http', 'ws')
-connectWS<ServerMessage>({
+let win = window as unknown as WindowStub
+let origin = location.origin
+let wsUrl = origin.replace('http', 'ws')
+connectWS({
   createWS(protocol) {
     let status = document.querySelector('#ws_status')
     if (status) {
@@ -23,13 +25,16 @@ connectWS<ServerMessage>({
     return new WebSocket(wsUrl, [protocol])
   },
   attachWS(ws) {
-    console.log('attach ws')
+    console.debug('attach ws')
 
-    let emit = function emit() {
-      ws.send(Array.from(arguments))
-    } as (...args: any[]) => void
+    let emit: WindowStub['emit'] = function emit() {
+      ws.send(Array.from(arguments) as ClientMessage)
+    }
 
-    function emitHref(event: Event, flag?: 'q') {
+    function emitHref(event: MouseEvent, flag?: 'q') {
+      if (event.ctrlKey || event.shiftKey) {
+        return // do not prevent open in new tab or new window
+      }
       let a = event.currentTarget as HTMLAnchorElement
       let url = a.getAttribute('href')
       if (flag !== 'q') {
@@ -42,19 +47,26 @@ connectWS<ServerMessage>({
 
     function emitForm(event: Event) {
       let form = event.target as HTMLFormElement
-      let data = {} as any
+      let data = {} as Record<string, FormDataEntryValue | FormDataEntryValue[]>
       new FormData(form).forEach((value, key) => {
-        data[key] = value
+        if (key in data) {
+          let prevValue = data[key]
+          if (Array.isArray(prevValue)) {
+            prevValue.push(value)
+          } else {
+            data[key] = [prevValue, value]
+          }
+        } else {
+          data[key] = value
+        }
       })
-      let url =
-        form.getAttribute('action') ||
-        location.href.replace(location.origin, '')
+      let url = form.getAttribute('action') || location.href.replace(origin, '')
       emit(url, data)
       event.preventDefault()
     }
 
-    window.onpopstate = (event: PopStateEvent) => {
-      let url = location.href.replace(location.origin, '')
+    window.onpopstate = (_event: PopStateEvent) => {
+      let url = location.href.replace(origin, '')
       emit(url)
     }
 
@@ -65,11 +77,18 @@ connectWS<ServerMessage>({
     ws.ws.addEventListener('open', () => {
       let locale =
         navigator && navigator.language ? navigator.language : undefined
-      let url = location.href.replace(location.origin, '')
-      let timezone = Intl
+      let url = location.href.replace(origin, '')
+      let timeZone = Intl
         ? Intl.DateTimeFormat().resolvedOptions().timeZone
         : undefined
-      let message: ClientMessage = ['mount', url, locale, timezone]
+      let timezoneOffset = new Date().getTimezoneOffset()
+      let message: ClientMessage = [
+        'mount',
+        url,
+        locale,
+        timeZone,
+        timezoneOffset,
+      ]
       ws.send(message)
     })
 
@@ -84,38 +103,23 @@ connectWS<ServerMessage>({
     }
   },
   onMessage(event) {
+    console.debug('on ws message:', event)
     onServerMessage(event)
   },
 })
 
-export type ClientMessage =
-  | [
-      type: 'mount',
-      url: string,
-      locale: string | undefined,
-      timezone: string | undefined,
-    ]
-  | [url: string, data?: any]
-
-export type ServerMessage =
-  | ['update', VElement]
-  | ['update-in', selector, VNode]
-  | ['append', selector, VNode]
-  | ['remove', selector]
-  | ['update-text', selector, string]
-  | ['update-all-text', selector, string]
-  | ['update-attrs', selector, attrs]
-  | ['update-props', selector, props]
-  | ['set-value', selector, string | number]
-  | ['batch', ServerMessage[]]
-  | ['set-cookie', string]
-
 function onServerMessage(message: ServerMessage) {
   switch (message[0]) {
     case 'update':
+      if (message[2]) {
+        document.title = message[2]
+      }
       updateElement(message[1])
       break
     case 'update-in':
+      if (message[3]) {
+        document.title = message[3]
+      }
       updateNode(message[1], message[2])
       break
     case 'append':
@@ -145,8 +149,11 @@ function onServerMessage(message: ServerMessage) {
     case 'set-cookie':
       document.cookie = message[1]
       break
+    case 'set-title':
+      document.title = message[1]
+      break
     default:
-      console.log('unknown server message:', message)
+      console.error('unknown server message:', message)
   }
 }
 

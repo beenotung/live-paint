@@ -1,6 +1,5 @@
 import escapeHTML from 'escape-html'
 import type { Context } from '../context'
-import { ContextSymbol } from '../context.js'
 import debug from 'debug'
 import type {
   html,
@@ -12,74 +11,127 @@ import type {
   Component,
   Element,
 } from './types'
+import { HTMLStream, noop } from './stream.js'
+import { Flush } from '../components/flush.js'
+import { renderError } from '../components/error.js'
+import { EarlyTerminate, Message } from '../helpers.js'
 
 const log = debug('html.ts')
 log.enabled = true
+
+export function nodeToHTML(node: Node, context: Context): html {
+  let html = ''
+  let stream = {
+    write: (chunk: html) => (html += chunk),
+    flush: noop,
+  }
+  writeNode(stream, node, context)
+  return html
+}
+
+export function nodeListToHTML(nodeList: NodeList, context: Context): html {
+  let html = ''
+  let stream = {
+    write: (chunk: html) => (html += chunk),
+    flush: noop,
+  }
+  nodeList.forEach(node => writeNode(stream, node, context))
+  return html
+}
 
 export function prerender(node: Node): Raw {
   let html = nodeToHTML(node, { type: 'static' })
   return ['raw', html]
 }
 
-export function nodeToHTML(node: Node, context: Context): html {
+export function writeNode(
+  stream: HTMLStream,
+  node: Node,
+  context: Context,
+): void {
   switch (node) {
     case null:
     case undefined:
     case false:
     case true:
-      return ''
+      return
   }
   switch (typeof node) {
     case 'string':
-      return escapeHTML(node)
+      return stream.write(escapeHTML(node))
     case 'number':
-      return String(node)
+      return stream.write(String(node))
   }
   if (node[0] === 'raw') {
-    return (node as Raw)[1]
+    return stream.write((node as Raw)[1])
   }
   if (Array.isArray(node[0])) {
-    return nodeListToHTML((node as Fragment)[0], context)
+    return writeNodeList(stream, (node as Fragment)[0], context)
   }
 
   node = node as JSXFragment
   if (!node[0] && !node[1]) {
-    return nodeListToHTML(node[2], context)
+    return writeNodeList(stream, node[2], context)
   }
 
   if (typeof node[0] === 'function') {
     node = node as Component
-    let attrs = {
-      [ContextSymbol]: context,
-      ...node[1],
+    let componentFn = node[0]
+    if (componentFn === Flush) {
+      stream.flush()
+      return
     }
-    node = node[0](attrs, node[2])
-    return nodeToHTML(node, context)
+    let attrs = node[1] || {}
+    let children = node[2]
+    if (children) {
+      Object.assign(attrs, { children })
+    }
+    try {
+      node = componentFn(attrs, context)
+      writeNode(stream, node, context)
+    } catch (error) {
+      if (error === EarlyTerminate || error instanceof Message) throw error
+      console.error('Caught error from componentFn:', error)
+      writeNode(stream, renderError(error, context), context)
+    }
+    return
   }
 
-  return elementToHTML(node, context)
+  return writeElement(stream, node, context)
 }
 
-function nodeListToHTML(nodeList: NodeList, context: Context): html {
-  let html = ''
-  nodeList.forEach(node => (html += nodeToHTML(node, context)))
-  return html
+function writeNodeList(
+  stream: HTMLStream,
+  nodeList: NodeList,
+  context: Context,
+): void {
+  nodeList.forEach(node => writeNode(stream, node, context))
 }
 
 const tagNameRegex = /([\w-]+)/
 const idRegex = /#([\w-]+)/
+const attrListRegex = /\[(.*?)\]/g
 const classListRegex = /\.([\w-]+)/g
 
-function elementToHTML(
+function writeElement(
+  stream: HTMLStream,
   [selector, attrs, children]: Element,
   context: Context,
-): html {
-  let tagName = selector.match(tagNameRegex)![1]
+): void {
+  let tagNameMatch = selector.match(tagNameRegex)
+  if (!tagNameMatch) {
+    throw new TypeError('failed to parse tag name, selector: ' + selector)
+  }
+  let tagName: string = tagNameMatch[1]
   let html = `<${tagName}`
   let idMatch = selector.match(idRegex)
   if (idMatch) {
     selector = selector.replace(idMatch[0], '')
     html += ` id="${idMatch[1]}"`
+  }
+  for (let attrMatch of selector.matchAll(attrListRegex)) {
+    selector = selector.replace(attrMatch[0], '')
+    html += ` ${attrMatch[1]}`
   }
   let classList: string[] = []
   for (let classMatch of selector.matchAll(classListRegex)) {
@@ -90,6 +142,7 @@ function elementToHTML(
   }
   if (attrs) {
     Object.entries(attrs).forEach(([name, value]) => {
+      if (value === undefined || value === null) return
       switch (name) {
         case 'class':
         case 'className':
@@ -103,22 +156,22 @@ function elementToHTML(
     })
   }
   html += '>'
+  stream.write(html)
   switch (tagName) {
     case 'img':
     case 'input':
     case 'br':
     case 'hr':
     case 'meta':
-      return html
+      return
   }
   if (children) {
-    children.forEach(node => (html += nodeToHTML(node, context)))
+    writeNodeList(stream, children, context)
   }
-  html += `</${tagName}>`
-  return html
+  stream.write(`</${tagName}>`)
 }
 
-export function flagsToClassName(flags: Record<string, any>): string {
+export function flagsToClassName(flags: Record<string, boolean>): string {
   let classes: string[] = []
   Object.entries(flags).forEach(([name, value]) => {
     if (value) {

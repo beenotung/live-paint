@@ -1,15 +1,29 @@
-import type { ManagedWebsocket } from '../ws/wss'
 import { debugLog } from '../debug.js'
+import type { ManagedWebsocket } from '../ws/wss'
+import type { WsContext } from './context'
 
-const log = debugLog('session.ts')
+let log = debugLog('session.ts')
 log.enabled = true
 
 export type Session = {
   ws: ManagedWebsocket
   locales?: string
   timeZone?: string
+  timezoneOffset?: number
   url?: string
   onCloseListeners: Array<(session: Session) => void>
+}
+
+export function sessionToContext(
+  session: Session,
+  currentUrl: string,
+): WsContext {
+  return {
+    type: 'ws',
+    ws: session.ws,
+    session,
+    url: currentUrl,
+  }
 }
 
 export let sessions = new Map<ManagedWebsocket, Session>()

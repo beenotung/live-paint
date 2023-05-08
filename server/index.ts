@@ -1,22 +1,22 @@
 import express from 'express'
-import { Server as HttpServer } from 'http'
-import ws from 'typestub-ws'
+import http from 'http'
+import { WebSocketServer } from 'ws'
 import { config } from './config.js'
 import { join } from 'path'
 import compression from 'compression'
 import { debugLog } from './debug.js'
 import { listenWSSConnection } from './ws/wss-lite.js'
-import { expressRouter, onWsMessage } from './app/app.js'
+import { appRouter, onWsMessage } from './app/app.js'
 import { startSession, closeSession } from './app/session.js'
-import { existsSync, unlinkSync } from 'fs'
 import open from 'open'
+import { print } from 'listening-on'
 
 const log = debugLog('index.ts')
 log.enabled = true
 
 const app = express()
-const server = new HttpServer(app)
-const wss = new ws.WebSocketServer({ server })
+const server = http.createServer(app)
+const wss = new WebSocketServer({ server })
 listenWSSConnection({
   wss,
   onConnection: ws => {
@@ -24,26 +24,31 @@ listenWSSConnection({
     startSession(ws)
   },
   onClose: (ws, code, reason) => {
-    log('close ws:', ws.ws.protocol, code, reason)
+    log('close ws:', ws.ws.protocol, code, String(reason))
     closeSession(ws)
   },
   onMessage: onWsMessage,
 })
 
-app.use(compression())
+if (!config.behind_proxy) {
+  app.use(compression())
+}
+if (config.development) {
+  app.use('/js', express.static(join('dist', 'client')))
+} else {
+  app.use('/js', express.static('build'))
+}
 app.use(express.static('public'))
-app.use(express.static(join('dist', 'client')))
 
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
 
-app.use(expressRouter)
+app.use(appRouter)
 
-const PORT = config.port
-server.listen(PORT, () => {
-  log(`listening on http://localhost:${PORT}`)
-  if (config.development && existsSync('.open')) {
-    open(`http://localhost:${PORT}`)
-    unlinkSync('.open')
+const port = config.port
+server.listen(port, () => {
+  print({ port })
+  if (config.auto_open) {
+    open(`http://localhost:${port}`)
   }
 })

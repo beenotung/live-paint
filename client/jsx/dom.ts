@@ -1,4 +1,5 @@
-import {
+import { WindowStub } from '../internal'
+import type {
   Fragment,
   Raw,
   VNode,
@@ -8,12 +9,17 @@ import {
   props,
 } from './types'
 
+const win = window as unknown as WindowStub
+const origin = location.origin
+
 function findAndApplyRedirect(root: ParentNode) {
   root.querySelectorAll('a[data-live=redirect]').forEach(e => {
     let a = e as HTMLAnchorElement
     let title = a.title || document.title
-    history.replaceState(null, title, a.href)
+    const href = a.href.replace(origin, '')
+    history.replaceState(null, title, href)
     a.remove()
+    win.emit(href)
   })
 }
 
@@ -71,7 +77,7 @@ export function removeNode(selector: string) {
   e.remove()
 }
 
-export function updateText(selector: string, text: string) {
+export function updateText(selector: string, text: string | number) {
   let e = document.querySelector(selector)
   if (!e) {
     console.error(
@@ -80,12 +86,12 @@ export function updateText(selector: string, text: string) {
     )
     throw new Error('Failed to query selector when updateText')
   }
-  e.textContent = text
+  e.textContent = text as string
 }
 
-export function updateAllText(selector: string, text: string) {
+export function updateAllText(selector: string, text: string | number) {
   document.querySelectorAll(selector).forEach(e => {
-    e.textContent = text
+    e.textContent = text as string
   })
 }
 
@@ -172,6 +178,7 @@ function createElement(element: VElement): Element | null {
 
 const tagNameRegex = /([\w-]+)/
 const idRegex = /#([\w-]+)/
+const attrListRegex = /\[([\w-]+)=?(.*?)\]/g
 const classListRegex = /\.([\w-]+)/g
 
 function createElementBySelector(selector: string): Element {
@@ -188,21 +195,33 @@ function createElementBySelector(selector: string): Element {
 function applySelector(e: Element, selector: string) {
   let idMatch = selector.match(idRegex)
   if (idMatch) {
-    selector = selector.replace(idMatch[0], '')
     e.id = idMatch[1]
   }
-  let classList: string[] = []
-  for (let classMatch of selector.matchAll(classListRegex)) {
-    classList.push(classMatch[1])
+  for (let attrMatch of selector.matchAll(attrListRegex)) {
+    selector = selector.replace(attrMatch[0], '')
+    let key = attrMatch[1]
+    let value = attrMatch[2]
+    if (
+      value &&
+      ((value[0] === '"' && value[value.length - 1] === '"') ||
+        (value[0] === "'" && value[value.length - 1] === "'"))
+    ) {
+      value = value.slice(1, value.length - 1)
+    }
+    e.setAttribute(key, value)
   }
-  if (classList.length > 0 && e.className) {
-    e.className = classList.join(' ')
+  for (let classMatch of selector.matchAll(classListRegex)) {
+    e.classList.add(classMatch[1])
   }
 }
 
 function applyAttrs(e: Element, attrs: attrs) {
   Object.entries(attrs).forEach(entry => {
-    e.setAttribute(entry[0], entry[1] as string)
+    if (entry[1] === null) {
+      e.removeAttribute(entry[0])
+    } else {
+      e.setAttribute(entry[0], entry[1] as string)
+    }
   })
   let input = e as HTMLInputElement
   if (input.tagName === 'INPUT' && input.type === 'radio') {
@@ -214,7 +233,7 @@ function applyAttrs(e: Element, attrs: attrs) {
 
 function applyProps(e: Element, props: props) {
   Object.entries(props).forEach(entry => {
-    ;(e as any)[entry[0]] = entry[1]
+    ;(e as unknown as props)[entry[0]] = entry[1]
   })
 }
 
@@ -241,8 +260,8 @@ function createChild(e: Element, node: VNode) {
   if (node[0] === 'raw') {
     node = node as Raw
     const fragment = document.createRange().createContextualFragment(node[1])
-    e.appendChild(fragment)
     findAndApplyRedirect(fragment)
+    e.appendChild(fragment)
     return
   }
   if (Array.isArray(node[0])) {

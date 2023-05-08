@@ -10,4 +10,6 @@ Powered by [ts-liveview](./toolkit.md)
 
 Screenshot:
 
-![Screenshot](./screenshot.png "Screenshot of live-paint")
+![Screenshot](./screenshot.png 'Screenshot of live-paint')
+
+See [help.txt](help.txt) to get started.

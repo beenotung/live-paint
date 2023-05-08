@@ -1,14 +1,16 @@
 import type express from 'express'
-import type { Server } from 'typestub-ws'
-import type { ServerMessage } from '../../client'
 import type { ManagedWebsocket } from '../ws/wss'
 import type { RouteContext } from 'url-router.ts'
+import type { Session } from './session'
+import type { PageRoute } from './routes'
 
-export type Context = StaticContext | ExpressContext | WsContext
+export type Context = StaticContext | DynamicContext
 
 export type StaticContext = {
   type: 'static'
 }
+
+export type DynamicContext = ExpressContext | WsContext
 
 export type ExpressContext = {
   type: 'express'
@@ -19,10 +21,10 @@ export type ExpressContext = {
 
 export type WsContext = {
   type: 'ws'
-  ws: ManagedWebsocket<ServerMessage>
-  wss: Server
+  ws: ManagedWebsocket
   event?: string
-  args?: any[]
+  args?: unknown[]
+  session: Session
 } & RouterContext
 
 export type RouterContext = {
@@ -30,28 +32,29 @@ export type RouterContext = {
   routerMatch?: RouterMatch
 }
 
-export type RouterMatch = Omit<RouteContext<any>, 'value'>
+export type RouterMatch = Omit<RouteContext<PageRoute>, 'value'>
 
-export const ContextSymbol = Symbol('context')
-
-export function getContext(attrs: object): Context {
-  return (attrs as any)[ContextSymbol]
-}
-
-export function getContextUrl(attrs: object): string {
-  let context: Context = (attrs as any)[ContextSymbol]
+export function getContextUrl(context: Context): string {
   if (context.type === 'static') {
     throw new Error('url is not supported in static context')
   }
   return context.url
 }
 
-export function getRouterContext(attrs: object) {
-  let context: Context = (attrs as any)[ContextSymbol]
+export function castDynamicContext(context: Context): DynamicContext {
   if (context.type === 'static') {
     throw new Error(
-      'Assertion failed, cannot get router context in static context',
+      'Assertion failed, expect dynamic context, got static context',
     )
   }
   return context
+}
+
+export function getContextFormBody(context: Context): unknown | undefined {
+  if (context.type === 'ws') {
+    return context.args?.[0]
+  }
+  if (context.type === 'express') {
+    return context.req.body
+  }
 }

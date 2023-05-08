@@ -1,0 +1,4 @@
+user=node
+host=paint.liveviews.cc
+root_dir=/home/node/workspace/github.com/beenotung/live-paint
+pm2_name="live-paint"

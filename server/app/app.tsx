@@ -1,24 +1,54 @@
-import JSX from './jsx/jsx.js'
-import type { index } from '../../template/index.html'
-import { loadTemplate } from '../template.js'
-import express from 'express'
-import { ExpressContext, WsContext } from './context.js'
-import type { Element } from './jsx/types'
-import { nodeToHTML } from './jsx/html.js'
-import { sendHTML } from './express.js'
+import { o } from './jsx/jsx.js'
+import { scanTemplateDir } from '../template.js'
+import express, { Response } from 'express'
+import type { Context, ExpressContext, WsContext } from './context'
+import type { Element, Node } from './jsx/types'
+import { writeNode } from './jsx/html.js'
+import { sendHTMLHeader } from './express.js'
 import { OnWsMessage } from '../ws/wss.js'
 import { dispatchUpdate } from './jsx/dispatch.js'
 import { EarlyTerminate } from './helpers.js'
 import { getWSSession, sessions } from './session.js'
-import { capitalize } from './string.js'
-import type { ClientMessage } from '../../client/index'
+import escapeHtml from 'escape-html'
+import { config } from '../config.js'
+import { MuteConsole } from './components/script.js'
+import type {
+  ClientMountMessage,
+  ClientRouteMessage,
+  ServerMessage,
+} from '../../client/types'
+import { renderIndexTemplate } from '../../template/index.js'
+import escapeHTML from 'escape-html'
+import { HTMLStream } from './jsx/stream.js'
 import Style from './components/style.js'
-import { ServerMessage } from '../../client/index'
 import { Raw } from './components/raw.js'
 import { loadState, saveState } from './state.js'
-import { config } from '../config.js'
 
-let template = loadTemplate<index>('index')
+if (config.development) {
+  scanTemplateDir('template')
+}
+function renderTemplate(
+  stream: HTMLStream,
+  context: Context,
+  options: { title: string; description: string; app: Node },
+) {
+  const app = options.app
+  renderIndexTemplate(stream, {
+    title: escapeHTML(options.title),
+    description: escapeHTML(options.description),
+    app:
+      typeof app == 'string' ? app : stream => writeNode(stream, app, context),
+  })
+}
+
+let scripts = config.development ? (
+  <script src="/js/index.js" type="module" defer></script>
+) : (
+  <>
+    {MuteConsole}
+    <script src="/js/bundle.min.js" type="module" defer></script>
+  </>
+)
 
 let colors = ['white', 'black', 'red', 'green', 'blue']
 
@@ -79,13 +109,14 @@ export function App(): Element {
         </h1>
         <p>
           Powered by{' '}
-          <a href="https://github.com/beenotung/ts-liveview/tree/v2-rc3-jsx-with-context">
+          <a href="https://github.com/beenotung/ts-liveview/tree/v5-minimal-template">
             ts-liveview
           </a>
         </p>
         {colorPanel}
-        <br/>
+        <br />
         {board}
+        {scripts}
       </>,
     ],
   ]
@@ -200,8 +231,11 @@ function paint(input: PaintInput): void {
   }
 }
 
-export let expressRouter = express.Router()
-expressRouter.use((req, res, next) => {
+export let appRouter = express.Router()
+
+appRouter.use((req, res, next) => {
+  sendHTMLHeader(res)
+
   let context: ExpressContext = {
     type: 'express',
     req,
@@ -209,43 +243,58 @@ expressRouter.use((req, res, next) => {
     next,
     url: req.url,
   }
-  let app: string
-  let description = 'TODO'
+
+  let html = ''
+  let stream = {
+    write(chunk: string) {
+      html += chunk
+    },
+    flush() {},
+  }
+
   try {
-    app = nodeToHTML(<App />, context)
+    renderTemplate(stream, context, {
+      title: config.site_name,
+      description: config.site_description,
+      app: App(),
+    })
   } catch (error) {
     if (error === EarlyTerminate) {
       return
     }
     console.error('Failed to render App:', error)
-    res.status(500)
-    if (error instanceof Error) {
-      app = 'Internal Error: ' + error.message
-    } else {
-      app = 'Unknown Error'
+    if (!res.headersSent) {
+      res.status(500)
     }
+    html +=
+      error instanceof Error
+        ? 'Internal Error: ' + escapeHtml(error.message)
+        : 'Unknown Error: ' + escapeHtml(String(error))
   }
-  let page = capitalize(req.url.split('/')[1] || 'Home Page')
-  let html = template({
-    title: `${page} - LiveView Demo`,
-    description,
-    app,
-  })
-  sendHTML(res, html)
+
+  // deepcode ignore XSS: the dynamic content is html-escaped
+  res.end(html)
 })
 
-export let onWsMessage: OnWsMessage<ClientMessage> = (event, ws, wss) => {
+export let onWsMessage: OnWsMessage = (event, ws, _wss) => {
+  console.log('ws message:', event)
+  // TODO handle case where event[0] is not url
   let eventType: string | undefined
   let url: string
-  let args: any[] | undefined
-  let locale: string | undefined
-  let timeZone: string | undefined
+  let args: unknown[] | undefined
+  let session = getWSSession(ws)
   if (event[0] === 'mount') {
+    event = event as ClientMountMessage
     eventType = 'mount'
     url = event[1]
-    locale = event[2]
-    timeZone = event[3]
+    session.locales = event[2]
+    let timeZone = event[3]
+    if (timeZone && timeZone !== 'null') {
+      session.timeZone = timeZone
+    }
+    session.timezoneOffset = event[4]
   } else if (event[0][0] === '/') {
+    event = event as ClientRouteMessage
     eventType = 'route'
     url = event[0]
     args = event.slice(1)
@@ -256,21 +305,14 @@ export let onWsMessage: OnWsMessage<ClientMessage> = (event, ws, wss) => {
     console.log('unknown type of ws message:', event)
     return
   }
+  session.url = url
   let context: WsContext = {
     type: 'ws',
     ws,
-    wss,
     url,
     args,
     event: eventType,
+    session,
   }
-  let session = getWSSession(ws)
-  session.url = url
-  if (locale) {
-    session.locales = locale
-  }
-  if (timeZone) {
-    session.timeZone = timeZone
-  }
-  dispatchUpdate(<App />, context)
+  dispatchUpdate(context, <App />)
 }

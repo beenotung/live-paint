@@ -2,16 +2,24 @@
   "compilerOptions": {
     "allowSyntheticDefaultImports": true,
     "jsx": "react",
-    "reactNamespace": "JSX",
+    "jsxFactory": "o",
+    "jsxFragmentFactory": "null",
     "strict": true,
+    "skipLibCheck": true,
     "incremental": true,
     "moduleResolution": "node",
-    "target": "ES2015",
+    "target": "es2018",
+    "module": "es6",
     "lib": [
       "dom",
       "es2019.object",
       "es2020.string"
     ],
     "outDir": "dist"
-  }
+  },
+  "exclude": [
+    "public",
+    "build",
+    "dist"
+  ]
 }

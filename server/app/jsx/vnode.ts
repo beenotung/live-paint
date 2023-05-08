@@ -2,17 +2,20 @@
 
 import type { VElement, VNode, VNodeList } from '../../../client/jsx/types'
 import type { Context } from '../context'
-import { ContextSymbol } from '../context.js'
 import type {
   Component,
   Element,
   Fragment,
+  html,
   JSXFragment,
   Node,
   NodeList,
   Raw,
 } from './types'
-import { nodeToHTML } from './html.js'
+import { nodeListToHTML } from './html.js'
+import { Flush } from '../components/flush.js'
+import { renderError } from '../components/error.js'
+import { EarlyTerminate, Message } from '../helpers.js'
 
 export function nodeToVElementOptimized(
   node: Element | Component,
@@ -27,7 +30,7 @@ export function nodeToVElementOptimized(
     throw new TypeError('expect Element or Component, got Node')
   }
   while (typeof node[0] === 'function') {
-    node = componentToNode(node as Component, context) as Element | Component
+    node = componentToVNode(node as Component, context) as Element | Component
     if (
       !(
         Array.isArray(node) &&
@@ -44,9 +47,13 @@ export function nodeToVElementOptimized(
     return nodeToVNode(node, context)
   }
   const vElement: VElement = nodeToVNode(node, context)
-  const childrenHTML = children.map(node => nodeToHTML(node, context)).join('')
-  const childrenRaw: Raw = ['raw', childrenHTML]
-  const vElementWithRaw: VElement = [vElement[0], vElement[1], [childrenRaw]]
+  let vChildren: VNodeList | undefined = undefined
+  if (vElement[2]) {
+    const childrenHTML: html = nodeListToHTML(vElement[2], context)
+    const childrenRaw: Raw = ['raw', childrenHTML]
+    vChildren = [childrenRaw]
+  }
+  const vElementWithRaw: VElement = [vElement[0], vElement[1], vChildren]
   const vElementSize = JSON.stringify(vElement).length
   const vElementWithRawSize = JSON.stringify(vElementWithRaw).length
   if (vElementSize > vElementWithRawSize) {
@@ -84,19 +91,30 @@ export function nodeToVNode(node: Node, context: Context): VNode {
   }
 
   if (typeof node[0] === 'function') {
-    node = componentToNode(node, context)
-    return nodeToVNode(node, context)
+    return componentToVNode(node, context)
   }
 
   return elementToVElement(node, context)
 }
 
-function componentToNode(component: Component, context: Context): Node {
-  const attrs = {
-    [ContextSymbol]: context,
-    ...component[1],
+function componentToVNode(component: Component, context: Context): VNode {
+  let componentFn = component[0]
+  if (componentFn === Flush) {
+    return null
   }
-  return component[0](attrs, component[2])
+  let attrs = component[1] || {}
+  let children = component[2]
+  if (children) {
+    Object.assign(attrs, { children })
+  }
+  try {
+    let node = componentFn(attrs, context)
+    return nodeToVNode(node, context)
+  } catch (error) {
+    if (error === EarlyTerminate || error instanceof Message) throw error
+    console.error('Caught error from componentFn:', error)
+    return renderError(error, context)
+  }
 }
 
 function elementToVElement(element: Element, context: Context): VElement {
