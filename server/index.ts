@@ -3,7 +3,6 @@ import http from 'http'
 import { WebSocketServer } from 'ws'
 import { config } from './config.js'
 import { join } from 'path'
-import compression from 'compression'
 import { debugLog } from './debug.js'
 import { listenWSSConnection } from './ws/wss-lite.js'
 import { appRouter, onWsMessage } from './app/app.js'
@@ -30,9 +29,6 @@ listenWSSConnection({
   onMessage: onWsMessage,
 })
 
-if (!config.behind_proxy) {
-  app.use(compression())
-}
 if (config.development) {
   app.use('/js', express.static(join('dist', 'client')))
 } else {
